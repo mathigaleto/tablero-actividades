@@ -65,7 +65,7 @@ window.boardReady=(async()=>{
  const {clone,merge,content}=TableroSync;
  const bar=document.createElement('div');bar.id='sync-toolbar';bar.style='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 24px;background:#eaf3ef;color:#263e53;font:14px "Segoe UI",system-ui,sans-serif';
  const status=document.createElement('span');status.id='server-status';status.setAttribute('role','status');status.textContent='Cargando actividades…';
- const actions=document.createElement('div');const refresh=document.createElement('button');refresh.type='button';refresh.textContent='Actualizar ahora';refresh.style='padding:7px 12px;border:1px solid #b6c9c4;border-radius:5px;background:white;color:#263e53;font:inherit;cursor:pointer';actions.append(refresh);bar.append(status,actions);document.body.prepend(bar);
+ const actions=document.createElement('div');bar.append(status,actions);document.body.prepend(bar);
  let me,displayed,latest,pending=null,queue=null,busy=false,blocked=false,reading=null,disposed=false;
  const editing=()=>!!document.querySelector('.task-dialog[open],#people-dialog[open],#companies-dialog[open],#identity-dialog[open]');
  const timestamp=()=>new Intl.DateTimeFormat('es-PY',{hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date());
@@ -80,7 +80,7 @@ window.boardReady=(async()=>{
   return true;
  }
  function lock(message){
-  blocked=true;setStatus(message,true);refresh.textContent='Recargar desde servidor';
+  blocked=true;setStatus(message+' · Para recargar, usá el botón del navegador.',true);
   const download=document.createElement('button');download.type='button';download.textContent='Descargar cambios pendientes';download.onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(window.openai.widgetState.privateContent,null,2)],{type:'application/json'}));a.download='actividades-pendientes.json';a.click();URL.revokeObjectURL(a.href)};actions.prepend(download);
   document.querySelectorAll('dialog[open]').forEach(d=>d.close());document.querySelector('#erp-actividades').inert=true;
  }
@@ -101,7 +101,7 @@ window.boardReady=(async()=>{
   return reading;
  }
  async function save(){
-  if(busy||blocked||!queue)return;busy=true;refresh.disabled=true;
+  if(busy||blocked||!queue)return;busy=true;
   const draft=queue;queue=null;setStatus('Guardando cambios…');
   try{
    let result,remote,payload;
@@ -114,13 +114,12 @@ window.boardReady=(async()=>{
    try{const canonical=await api('read');if(canonical.revision>=latest.revision)latest=canonical}catch{}
    pending=latest;setStatus('Guardado en servidor · '+timestamp()+' · '+me.name);
   }catch(e){queue=draft;lock(e.message)}finally{
-   busy=false;refresh.disabled=false;
+   busy=false;
    if(queue&&!blocked)save();else if(pending&&!blocked&&!editing()){
     try{apply(pending)}catch(e){lock('Los datos se guardaron, pero no se pudieron mostrar: '+e.message)}
    }
   }
  }
- refresh.onclick=()=>{if(blocked){queue=null;busy=false;location.reload();return}poll(true)};
  try{
   const initial=await Promise.all([api('me'),api('read')]);me=initial[0];latest=initial[1];displayed=clone(latest.data);window.tablero.me=me;
   window.openai={widgetState:{privateContent:{...clone(displayed),currentUser:me.name}},async setWidgetState(value){
@@ -139,13 +138,13 @@ window.boardReady=(async()=>{
   window.addEventListener('beforeunload',e=>{if(busy||queue){e.preventDefault();e.returnValue='Hay cambios pendientes'}});
  }catch(e){
   if(e.status===401||e.status===403||!session){sessionStorage.removeItem('tablero-session');location.replace('./?sesion=1')}
-  else{setStatus('No se pudieron cargar las actividades. '+e.message,true);refresh.textContent='Reintentar';refresh.onclick=()=>location.reload()}
+  else{setStatus('No se pudieron cargar las actividades. '+e.message+' · Reintentá con el botón de recarga del navegador.',true)}
   throw e;
  }
 })();
 
 document.addEventListener('DOMContentLoaded',()=>{
- $('#login-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.target,b=$('#message');f.querySelector('button').disabled=true;b.textContent='Ingresando…';try{storeSession(await authCall('token?grant_type=password',{email:f.username.value.trim().toLowerCase()+'@cuentas.tablero.invalid',password:f.password.value}));await api('me');location.href='tablero.html?v=20261102-sync2'}catch{b.textContent='No se pudo ingresar. Revisá el usuario y la contraseña.'}finally{f.querySelector('button').disabled=false}});
+ $('#login-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.target,b=$('#message');f.querySelector('button').disabled=true;b.textContent='Ingresando…';try{storeSession(await authCall('token?grant_type=password',{email:f.username.value.trim().toLowerCase()+'@cuentas.tablero.invalid',password:f.password.value}));await api('me');location.href='tablero.html?v=20261102-cosmesoft1'}catch{b.textContent='No se pudo ingresar. Revisá el usuario y la contraseña.'}finally{f.querySelector('button').disabled=false}});
  $('#logout')?.addEventListener('click',logout);
  $('#password-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.target;try{await authCall('token?grant_type=password',{email:session.user.email,password:f.current.value});const r=await fetchWithTimeout(CONFIG.url+'/auth/v1/user',{method:'PUT',headers:{apikey:CONFIG.key,Authorization:'Bearer '+await token(),'Content-Type':'application/json'},body:JSON.stringify({password:f.password.value})});if(!r.ok)throw Error('No se pudo cambiar la contraseña');$('#message').textContent='Contraseña actualizada.';f.reset()}catch(e){$('#message').textContent=e.message}});
 });
