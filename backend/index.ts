@@ -5,12 +5,12 @@ const cors={'Access-Control-Allow-Origin':allowed,'Access-Control-Allow-Headers'
 const reply=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{...cors,'Content-Type':'application/json'}});
 const fail=(message:string,status=400)=>{throw Object.assign(Error(message),{status})};
 const email=(name:string)=>name+'@cuentas.tablero.invalid';
-const valid=(u:any)=>u&&typeof u.username==='string'&&/^[a-z0-9._-]{3,60}$/.test(u.username)&&typeof u.name==='string'&&u.name.trim().length>0&&u.name.length<=100&&typeof u.password==='string'&&u.password.length>=12&&u.password.length<=200;
+const valid=(u:any)=>u&&typeof u.username==='string'&&/^[a-z0-9._-]{3,60}$/.test(u.username)&&typeof u.password==='string'&&u.password.length>=10&&u.password.length<=200;
 async function create(u:any,admin=false){
- if(!valid(u))fail('Usuario, nombre o contraseña inválidos (mínimo 12 caracteres)');
- const {data,error}=await supabase.auth.admin.createUser({email:email(u.username),password:u.password,email_confirm:true,user_metadata:{name:u.name}});
+ if(!valid(u))fail('Usuario o contraseña inválidos (mínimo 10 caracteres)');
+ const {data,error}=await supabase.auth.admin.createUser({email:email(u.username),password:u.password,email_confirm:true,user_metadata:{name:u.username}});
  if(error||!data.user)fail('No se pudo crear: el usuario puede existir o los datos no son válidos');
- const {error:memberError}=await supabase.from('tablero_members').insert({id:data.user.id,username:u.username,name:u.name.trim(),admin});
+ const {error:memberError}=await supabase.from('tablero_members').insert({id:data.user.id,username:u.username,name:u.username,admin});
  if(memberError){await supabase.auth.admin.deleteUser(data.user.id);fail('No se pudo guardar la cuenta')}
  return data.user.id;
 }
@@ -23,6 +23,7 @@ Deno.serve(async(req:Request)=>{
  const bearer=req.headers.get('Authorization')?.replace(/^Bearer /i,'');if(!bearer)fail('Iniciá sesión',401);
  const {data:identity,error:authError}=await supabase.auth.getUser(bearer);if(authError||!identity.user)fail('Sesión inválida',401);
  const {data:me,error:memberError}=await supabase.from('tablero_members').select('*').eq('id',identity.user.id).single();if(memberError||!me?.active)fail('Cuenta sin acceso al tablero',403);
+ me.name=me.username;
  if(b.action==='me')return reply(me);
  if(b.action==='read'){const {data,error}=await supabase.from('tablero_state').select('revision,data').eq('id',1).single();if(error)fail('No se pudo cargar el tablero',500);return reply(data)}
  if(b.action==='write'){
@@ -41,12 +42,12 @@ Deno.serve(async(req:Request)=>{
  if(!me.admin)fail('Solo administradores',403);
  if(b.action==='users'){const {data,error}=await supabase.from('tablero_members').select('*').order('username');if(error)fail('No se pudieron cargar las cuentas',500);return reply(data)}
  if(b.action==='create-users'){
-  if(!Array.isArray(b.users)||!b.users.length||b.users.length>50||!b.users.every(valid))fail('Revisá el formato. Máximo 50 usuarios y contraseñas de 12 caracteres como mínimo');
+  if(!Array.isArray(b.users)||!b.users.length||b.users.length>50||!b.users.every(valid))fail('Revisá el formato. Máximo 50 usuarios y contraseñas de 10 caracteres como mínimo');
   const results=[];for(const u of b.users){try{await create(u);results.push({username:u.username,ok:true})}catch(e){results.push({username:u.username,ok:false,error:e.message})}}return reply({results});
  }
  if(b.action==='update-user'){
   if(b.id===me.id)fail('Usá Mi cuenta para cambiar tu contraseña');const {data:target}=await supabase.from('tablero_members').select('id').eq('id',b.id).single();if(!target)fail('Cuenta inexistente',404);
-  if(b.password!==undefined){if(typeof b.password!=='string'||b.password.length<12||b.password.length>200)fail('Contraseña inválida');const {error}=await supabase.auth.admin.updateUserById(b.id,{password:b.password});if(error)fail('No se pudo actualizar la contraseña',500)}
+  if(b.password!==undefined){if(typeof b.password!=='string'||b.password.length<10||b.password.length>200)fail('Contraseña inválida');const {error}=await supabase.auth.admin.updateUserById(b.id,{password:b.password});if(error)fail('No se pudo actualizar la contraseña',500)}
   else if(typeof b.active==='boolean'){const {error}=await supabase.from('tablero_members').update({active:b.active}).eq('id',b.id);if(error)fail('No se pudo actualizar la cuenta',500)}else fail('Operación inválida');return reply({ok:true});
  }
  fail('Operación no encontrada',404);

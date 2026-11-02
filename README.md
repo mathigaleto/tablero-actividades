@@ -9,7 +9,7 @@ Los datos del tablero y las cuentas no se almacenan en el repositorio. Todas las
 1. Iniciar sesión con usuario y contraseña.
 2. En el menú del tablero, seleccionar el usuario para abrir Mi cuenta.
 3. Desde Mi cuenta, el administrador puede acceder a Administrar cuentas.
-4. Crear usuarios de a uno o en lotes de hasta 50, una línea por cuenta: `usuario;Nombre completo;contraseña`.
+4. Crear usuarios con el formulario Usuario y Contraseña (mínimo 10 caracteres). Para lotes de hasta 50, usar una línea por cuenta: `usuario;contraseña`. No se solicita nombre completo.
 5. Distribuir usuario y contraseña directamente a cada persona. No se envían correos ni invitaciones.
 6. Los usuarios habilitados pueden crear, editar y eliminar actividades, comentar y gestionar empresas y personas.
 7. Deshabilitar una cuenta impide inmediatamente sus próximas operaciones, aunque tenga una sesión abierta.
