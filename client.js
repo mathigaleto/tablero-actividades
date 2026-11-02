@@ -56,8 +56,12 @@ async function fetchWithTimeout(url,options={}){const controller=new AbortContro
 
 async function authCall(path,data){const r=await fetchWithTimeout(CONFIG.url+'/auth/v1/'+path,{method:'POST',headers:{apikey:CONFIG.key,'Content-Type':'application/json'},body:JSON.stringify(data)});const b=await r.json();if(!r.ok)throw Error(b.msg||b.error_description||b.message||'No se pudo iniciar sesión');return b}
 function storeSession(s){session=s;s.expires_at=Date.now()+s.expires_in*1000;sessionStorage.setItem('tablero-session',JSON.stringify(s))}
-async function token(){if(!session)throw Error('Iniciá sesión');if(session.expires_at<Date.now()+90000){refreshFlight??=authCall('token?grant_type=refresh_token',{refresh_token:session.refresh_token}).then(storeSession).finally(()=>refreshFlight=null);await refreshFlight}return session.access_token}
-async function api(action,data={}){const r=await fetchWithTimeout(CONFIG.url+'/functions/v1/tablero-api',{method:'POST',headers:{apikey:CONFIG.key,Authorization:'Bearer '+await token(),'Content-Type':'application/json'},body:JSON.stringify({action,...data})});const b=await r.json();if(!r.ok)throw Object.assign(Error(b.error||'No se pudo completar la operación'),{status:r.status});return b}
+async function token(force=false){if(!session)throw Error('Iniciá sesión');if(force||!session.expires_at||session.expires_at<Date.now()+90000){refreshFlight??=authCall('token?grant_type=refresh_token',{refresh_token:session.refresh_token}).then(storeSession).finally(()=>refreshFlight=null);await refreshFlight}return session.access_token}
+async function api(action,data={}){const send=async access=>fetchWithTimeout(CONFIG.url+'/functions/v1/tablero-api',{method:'POST',headers:{apikey:CONFIG.key,Authorization:'Bearer '+access,'Content-Type':'application/json'},body:JSON.stringify({action,...data})});const access=await token();let r=await send(access);if(r.status===401&&session){const renewed=session.access_token!==access?session.access_token:await token(true);r=await send(renewed)}const b=await r.json();if(!r.ok)throw Object.assign(Error(b.error||'No se pudo completar la operación'),{status:r.status});return b}
+// Refresh in the background without navigating away from a form on connection errors.
+const renewSession=()=>{if(session)token().catch(()=>{})};
+setInterval(renewSession,60000);window.addEventListener('focus',renewSession);window.addEventListener('online',renewSession);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)renewSession()});
 async function logout(){try{await fetchWithTimeout(CONFIG.url+'/auth/v1/logout',{method:'POST',headers:{apikey:CONFIG.key,Authorization:'Bearer '+await token()}})}catch{}sessionStorage.removeItem('tablero-session');location.href='./'}
 window.tablero={api,logout};
 window.boardReady=(async()=>{
@@ -82,7 +86,8 @@ window.boardReady=(async()=>{
  function lock(message){
   blocked=true;setStatus(message+' · Para recargar, usá el botón del navegador.',true);
   const download=document.createElement('button');download.type='button';download.textContent='Descargar cambios pendientes';download.onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(window.openai.widgetState.privateContent,null,2)],{type:'application/json'}));a.download='actividades-pendientes.json';a.click();URL.revokeObjectURL(a.href)};actions.prepend(download);
-  document.querySelectorAll('dialog[open]').forEach(d=>d.close());document.querySelector('#erp-actividades').inert=true;
+  // A failed save must not dismiss a different activity already being edited.
+  const active=document.querySelector('dialog[open]');if(active){let note=active.querySelector('.save-warning');if(!note){note=document.createElement('p');note.className='save-warning';note.setAttribute('role','alert');(active.querySelector('.modal-foot')||active).prepend(note)}note.textContent='El guardado anterior requiere atención. Podés conservar lo que estás escribiendo; no se cerrará este formulario.'}
  }
  async function poll(manual=false){
   if(disposed||busy||queue||blocked||!me)return;
@@ -135,7 +140,11 @@ window.boardReady=(async()=>{
   let timer=setInterval(()=>{if(!document.hidden)poll()},5000);
   window.addEventListener('pagehide',()=>{disposed=true;clearInterval(timer)});
   window.addEventListener('pageshow',e=>{if(e.persisted){disposed=false;timer=setInterval(()=>{if(!document.hidden)poll()},5000);poll()}});
-  window.addEventListener('beforeunload',e=>{if(busy||queue){e.preventDefault();e.returnValue='Hay cambios pendientes'}});
+  const markDraft=e=>{const dialog=e.target.closest?.('dialog[open]');if(dialog)dialog.dataset.unsaved='true'};
+  document.addEventListener('input',markDraft);document.addEventListener('change',markDraft);
+  document.addEventListener('reset',e=>{const dialog=e.target.closest?.('dialog');if(dialog)delete dialog.dataset.unsaved},true);
+  document.addEventListener('close',e=>{if(e.target.matches?.('dialog')){delete e.target.dataset.unsaved;e.target.querySelector('.save-warning')?.remove()}},true);
+  window.addEventListener('beforeunload',e=>{if(busy||queue||document.querySelector('dialog[open][data-unsaved="true"]')){e.preventDefault();e.returnValue='Hay cambios sin guardar'}});
  }catch(e){
   if(e.status===401||e.status===403||!session){sessionStorage.removeItem('tablero-session');location.replace('./?sesion=1')}
   else{setStatus('No se pudieron cargar las actividades. '+e.message+' · Reintentá con el botón de recarga del navegador.',true)}
@@ -144,7 +153,7 @@ window.boardReady=(async()=>{
 })();
 
 document.addEventListener('DOMContentLoaded',()=>{
- $('#login-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.target,b=$('#message');f.querySelector('button').disabled=true;b.textContent='Ingresando…';try{storeSession(await authCall('token?grant_type=password',{email:f.username.value.trim().toLowerCase()+'@cuentas.tablero.invalid',password:f.password.value}));await api('me');location.href='tablero.html?v=20261102-users1'}catch{b.textContent='No se pudo ingresar. Revisá el usuario y la contraseña.'}finally{f.querySelector('button').disabled=false}});
+ $('#login-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.target,b=$('#message');f.querySelector('button').disabled=true;b.textContent='Ingresando…';try{storeSession(await authCall('token?grant_type=password',{email:f.username.value.trim().toLowerCase()+'@cuentas.tablero.invalid',password:f.password.value}));await api('me');location.href='tablero.html?v=20261102-working1'}catch{b.textContent='No se pudo ingresar. Revisá el usuario y la contraseña.'}finally{f.querySelector('button').disabled=false}});
  $('#logout')?.addEventListener('click',logout);
  $('#password-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.target;try{if(f.password.value.length<10)throw Error('La contraseña debe tener al menos 10 caracteres.');await authCall('token?grant_type=password',{email:session.user.email,password:f.current.value});const r=await fetchWithTimeout(CONFIG.url+'/auth/v1/user',{method:'PUT',headers:{apikey:CONFIG.key,Authorization:'Bearer '+await token(),'Content-Type':'application/json'},body:JSON.stringify({password:f.password.value})});if(!r.ok)throw Error('No se pudo cambiar la contraseña');$('#message').textContent='Contraseña actualizada.';f.reset()}catch(e){$('#message').textContent=e.message}});
 });

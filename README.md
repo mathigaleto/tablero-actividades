@@ -26,3 +26,5 @@ La dirección de GitHub Pages y el código de la interfaz son públicos. Conocer
 El plan gratuito de Supabase tiene límites y puede pausar el proyecto después de un período de baja actividad. Revisar las condiciones vigentes en https://supabase.com/pricing y https://supabase.com/docs/guides/platform/free-project-pausing. No se configuró ningún servicio de pago.
 
 La sesión se conserva en la pestaña del navegador. Al cerrar la pestaña se requerirá ingresar nuevamente. Las credenciales iniciales se entregan por separado y no están en este repositorio.
+
+Mientras la página está abierta se renueva la sesión en segundo plano. Un error de conexión o de guardado no cierra un formulario que ya esté abierto. Si se intenta recargar o salir con un formulario modificado, el navegador pide confirmación. Los campos aún sin guardar permanecen en la página; no se guardan como borradores en el servidor.
