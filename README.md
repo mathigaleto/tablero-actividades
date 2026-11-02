@@ -15,7 +15,9 @@ Los datos del tablero y las cuentas no se almacenan en el repositorio. Todas las
 7. Deshabilitar una cuenta impide inmediatamente sus próximas operaciones, aunque tenga una sesión abierta.
 8. Descargar copias JSON desde Administración. Para importar, seleccionar un JSON compatible y confirmar el reemplazo.
 
-Los cambios de otras personas se consultan cada 15 segundos cuando no hay un formulario abierto. Si se intenta guardar sobre una versión desactualizada, se bloquea el guardado para evitar sobrescribir el trabajo ajeno. Se puede descargar la versión pendiente y recargar.
+Los cambios de otras personas se consultan cada 5 segundos y al volver a la pestaña o recuperar la conexión. El botón Actualizar ahora permite consultarlos inmediatamente. Los filtros se conservan. Si hay un formulario de edición abierto, se avisa cuando llegan cambios y se muestran al cerrarlo, preservando el borrador. Los comentarios y el historial pueden actualizarse mientras están abiertos.
+
+Al guardar, se combinan las ediciones de actividades distintas y las modificaciones de campos distintos de una actividad. Si dos personas cambian el mismo campo, se bloquea el guardado para proteger ambos trabajos. Se puede descargar la versión pendiente antes de recargar. La recarga descarta la copia local pendiente solo al pulsar explícitamente el botón correspondiente.
 
 ## Privacidad y límites
 
