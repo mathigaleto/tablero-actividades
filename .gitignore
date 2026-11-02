@@ -1,0 +1,4 @@
+acceso-admin.txt
+*pendientes.json
+node_modules/
+.env*

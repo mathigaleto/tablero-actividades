@@ -1,0 +1,28 @@
+const CONFIG={url:'https://hpggyvhsqqzuxexnmqql.supabase.co',key:'sb_publishable_zfPEmnzdIZaSg1vfI87SLg_Rn5H8FEw'};
+const $=s=>document.querySelector(s);
+let session;try{session=JSON.parse(sessionStorage.getItem('tablero-session'))}catch{}
+let refreshFlight;
+async function authCall(path,data){const r=await fetch(CONFIG.url+'/auth/v1/'+path,{method:'POST',headers:{apikey:CONFIG.key,'Content-Type':'application/json'},body:JSON.stringify(data)});const b=await r.json();if(!r.ok)throw Error(b.msg||b.error_description||b.message||'No se pudo iniciar sesión');return b}
+function storeSession(s){session=s;s.expires_at=Date.now()+s.expires_in*1000;sessionStorage.setItem('tablero-session',JSON.stringify(s))}
+async function token(){if(!session)throw Error('Iniciá sesión');if(session.expires_at<Date.now()+90000){refreshFlight??=authCall('token?grant_type=refresh_token',{refresh_token:session.refresh_token}).then(storeSession).finally(()=>refreshFlight=null);await refreshFlight}return session.access_token}
+async function api(action,data={}){const r=await fetch(CONFIG.url+'/functions/v1/tablero-api',{method:'POST',headers:{apikey:CONFIG.key,Authorization:'Bearer '+await token(),'Content-Type':'application/json'},body:JSON.stringify({action,...data})});const b=await r.json();if(!r.ok)throw Object.assign(Error(b.error||'No se pudo completar la operación'),{status:r.status});return b}
+async function logout(){try{await fetch(CONFIG.url+'/auth/v1/logout',{method:'POST',headers:{apikey:CONFIG.key,Authorization:'Bearer '+await token()}})}catch{}sessionStorage.removeItem('tablero-session');location.href='./'}
+window.tablero={api,logout};
+window.boardReady=(async()=>{
+ if(!document.body.dataset.board)return;
+ try{
+ const [me,board]=await Promise.all([api('me'),api('read')]);window.tablero.me=me;
+ let revision=board.revision,baseline=JSON.stringify(board.data),queue=null,busy=false,blocked=false;
+ const status=document.createElement('div');status.id='server-status';status.setAttribute('role','status');status.style='padding:10px 24px;background:#eaf3ef;color:#263e53;font:14px Arial';status.textContent='Conectado · '+me.name;document.body.prepend(status);
+ function lock(message){blocked=true;status.style.background='#ffe6d6';status.textContent=message+' · Descargá una copia pendiente o recargá.';const download=document.createElement('button');download.textContent='Descargar cambios pendientes';download.onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(window.openai.widgetState.privateContent,null,2)],{type:'application/json'}));a.download='actividades-pendientes.json';a.click();URL.revokeObjectURL(a.href)};status.append(download);const reload=document.createElement('button');reload.textContent='Recargar';reload.onclick=()=>location.reload();status.append(reload);document.querySelectorAll('dialog[open]').forEach(d=>d.close());$('#erp-actividades').inert=true}
+ async function save(){if(busy||blocked||!queue)return;busy=true;status.textContent='Guardando cambios…';const data=queue;queue=null;try{const result=await api('write',{revision,data});revision=result.revision;baseline=JSON.stringify(data);status.textContent='Guardado en servidor · '+me.name}catch(e){queue=data;lock(e.message)}finally{busy=false;if(queue&&!blocked)save()}}
+ window.openai={widgetState:{privateContent:{...board.data,currentUser:me.name}},async setWidgetState(value){this.widgetState=value;const p=value.privateContent;const data=JSON.parse(JSON.stringify({tasks:p.tasks,people:p.people,companies:p.companies,auditHistory:p.auditHistory}));if(JSON.stringify(data)!==baseline){queue=data;save()}}};
+ window.addEventListener('beforeunload',e=>{if(busy||queue){e.preventDefault();e.returnValue='Hay cambios pendientes'}});
+ setInterval(async()=>{if(busy||queue||blocked||document.querySelector('dialog[open]')||document.hidden)return;try{const next=await api('read');if(next.revision!==revision){revision=next.revision;baseline=JSON.stringify(next.data);window.dispatchEvent(new CustomEvent('openai:set_globals',{detail:{globals:{widgetState:{privateContent:{...next.data,currentUser:me.name}}}}}));status.textContent='Actualizado · '+me.name}}catch(e){status.textContent='Sin conexión: '+e.message}},15000);
+ }catch(e){sessionStorage.removeItem('tablero-session');location.replace('./?sesion=1');throw e}
+})();
+document.addEventListener('DOMContentLoaded',()=>{
+ $('#login-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.target,b=$('#message');f.querySelector('button').disabled=true;b.textContent='Ingresando…';try{storeSession(await authCall('token?grant_type=password',{email:f.username.value.trim().toLowerCase()+'@cuentas.tablero.invalid',password:f.password.value}));await api('me');location.href='tablero.html'}catch{b.textContent='No se pudo ingresar. Revisá el usuario y la contraseña.'}finally{f.querySelector('button').disabled=false}});
+ $('#logout')?.addEventListener('click',logout);
+ $('#password-form')?.addEventListener('submit',async e=>{e.preventDefault();const f=e.target;try{await authCall('token?grant_type=password',{email:session.user.email,password:f.current.value});const r=await fetch(CONFIG.url+'/auth/v1/user',{method:'PUT',headers:{apikey:CONFIG.key,Authorization:'Bearer '+await token(),'Content-Type':'application/json'},body:JSON.stringify({password:f.password.value})});if(!r.ok)throw Error('No se pudo cambiar la contraseña');$('#message').textContent='Contraseña actualizada.';f.reset()}catch(e){$('#message').textContent=e.message}});
+});
